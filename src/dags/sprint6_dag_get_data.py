@@ -13,8 +13,7 @@ import pendulum
 import vertica_python
 
 
-
-AWS_ACCESS_KEY_ID =  Variable.get("AWS_ACCESS_KEY_ID")
+AWS_ACCESS_KEY_ID = Variable.get("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = Variable.get("AWS_SECRET_ACCESS_KEY")
 
 
@@ -43,10 +42,10 @@ def load_dataset_file_to_vertica(
     df = pd.read_csv(dataset_path, dtype=type_override)
     num_rows = len(df)
     vertica_conn = vertica_python.connect(
-        host='51.250.75.20',
+        host=Variable.get("VERTICA_HOST"),
         port=5433,
-        user='stv2023091120',
-        password='htC5bbf0EAqKy3p'
+        user=Variable.get("VERTICA_USER"),
+        password=Variable.get("VERTICA_PASSWORD")
     )
     columns = ', '.join(columns)
     copy_expr = f"""
@@ -77,77 +76,46 @@ echo {{ params.files }}
 
 @dag(schedule_interval=None, start_date=pendulum.parse('2022-07-13'))
 def sprint6_dag_get_data():
-    bucket_files = ('dialogs.csv', 'groups.csv', 'users.csv', 'group_log.csv' )
+    load_list_info = [
+        ('dialogs.csv', ['message_id', 'message_ts', 'message_from', 'message_to', 'message', 'message_group'], {'message_group': 'Int64'}),
+        ('groups.csv', ['id', 'admin_id', 'group_name', 'registration_dt',
+                        'is_private'], {}),
+        ('users.csv', ['id', 'chat_name', 'registration_dt', 'country', 'age'], {'age': 'Int64'}),
+        ('group_log.csv', ['group_id', 'user_id', 'user_id_from', 'group_event',
+                           'event_timestamp'], {}),
+    ]
+
     fetch_tasks = [
         PythonOperator(
-            task_id=f'fetch_{key}',
+            task_id=f'fetch_{item_info[0]}',
             python_callable=fetch_s3_file,
-            op_kwargs={'bucket': 'sprint6', 'key': key},
-        ) for key in bucket_files
+            op_kwargs={'bucket': 'sprint6', 'key': item_info[0]},
+        ) for item_info in load_list_info
     ]
 
     print_10_lines_of_each = BashOperator(
         task_id='print_10_lines_of_each',
         bash_command=bash_command_tmpl,
-        params={'files': " ".join(f'/data/{f}' for f in bucket_files)}
+        params={'files': " ".join(f'/data/{item_info[0]}' for item_info in load_list_info)}
     )
 
     start = EmptyOperator(task_id='start')
     end = EmptyOperator(task_id='end')
-    load_users = PythonOperator(
-        task_id='load_users',
-        python_callable=load_dataset_file_to_vertica,
-        op_kwargs={
-            'dataset_path': '/data/users.csv',
-            'schema': 'stv2023091120__STAGING',
-            'table': 'users',
-            'columns': ['id', 'chat_name', 'registration_dt', 'country',
-                        'age'],  # , 'gender', 'email']
-            'type_override': {'age': 'Int64'},
-        },
-    )
 
-    load_groups = PythonOperator(
-        task_id='load_groups',
-        python_callable=load_dataset_file_to_vertica,
-        op_kwargs={
-            'dataset_path': '/data/groups.csv',
-            'schema': 'stv2023091120__STAGING',
-            'table': 'groups',
-            'columns': ['id', 'admin_id', 'group_name', 'registration_dt',
-                        'is_private'],
-        },
-    )
+    load_tasks = [
+            PythonOperator(
+                task_id=f'load_{filename.split(".")[0]}',
+                python_callable=load_dataset_file_to_vertica,
+                op_kwargs={
+                    'dataset_path': f'/data/{filename}',
+                    'schema': 'stv2023091120__STAGING',
+                    'table': filename.split('.')[0],
+                    'columns': columns,
+                    'type_override': type_override,
+                }
+            ) for filename, columns, type_override in load_list_info]
 
-    load_dialogs = PythonOperator(
-        task_id='load_dialogs',
-        python_callable=load_dataset_file_to_vertica,
-        op_kwargs={
-            'dataset_path': '/data/dialogs.csv',
-            'schema': 'stv2023091120__STAGING',
-            'table': 'dialogs',
-            'columns': ['message_id', 'message_ts', 'message_from',
-                        'message_to', 'message', 'message_group'],
-            'type_override': {'message_group': 'Int64'},
-        },
-    )
-
-    load_group_log = PythonOperator(
-        task_id='load_group_log',
-        python_callable=load_dataset_file_to_vertica,
-        op_kwargs={
-            'dataset_path': '/data/group_log.csv',
-            'schema': 'stv2023091120__STAGING',
-            'table': 'group_log',
-            'columns': ['group_id', 'user_id', 'user_id_from', 'event',
-                        'datetime'],
-        },
-    )
-
-    fetch_tasks >> print_10_lines_of_each >> start >> [load_users,
-                                                       load_groups,
-                                                       load_dialogs,
-                                                       load_group_log] >> end
+    fetch_tasks >> print_10_lines_of_each >> start >> load_tasks >> end
 
 
 _ = sprint6_dag_get_data()

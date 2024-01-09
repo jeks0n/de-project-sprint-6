@@ -33,7 +33,7 @@ WITH user_group_log AS (
     INNER JOIN STV2023091120__DWH.l_user_group_activity luga ON luga.hk_group_id = hg.hk_group_id
     INNER JOIN STV2023091120__DWH.s_auth_history ah ON ah.hk_l_user_group_activity = luga.hk_l_user_group_activity
     LEFT JOIN STV2023091120__DWH.l_user_message um ON um.hk_user_id = luga.hk_user_id
-    WHERE ah.event = 'add' AND um.hk_user_id IS NULL
+    WHERE ah.group_event = 'add' AND um.hk_user_id IS NULL
     GROUP BY hg.hk_group_id
 )
 
@@ -70,7 +70,7 @@ user_group_log AS (
     INNER JOIN STV2023091120__DWH.l_user_group_activity luga ON luga.hk_group_id = hg.hk_group_id
     INNER JOIN STV2023091120__DWH.s_auth_history ah ON ah.hk_l_user_group_activity = luga.hk_l_user_group_activity
     LEFT JOIN STV2023091120__DWH.l_user_message um ON um.hk_user_id = luga.hk_user_id
-    WHERE ah.event = 'add'
+    WHERE ah.group_event = 'add'
         AND um.hk_user_id IS NULL
     GROUP BY hg.hk_group_id
 )

@@ -3,7 +3,7 @@ DROP TABLE IF EXISTS STV2023091120__DWH.s_auth_history;
 CREATE TABLE STV2023091120__DWH.s_auth_history (
     hk_l_user_group_activity BIGINT NOT NULL CONSTRAINT s_auth_history_hk_l_user_group_activity_fkey REFERENCES STV2023091120__DWH.l_user_group_activity (hk_l_user_group_activity),
     user_id_from BIGINT,
-    "event" VARCHAR,
+    group_event VARCHAR,
     event_dt TIMESTAMP,
     load_dt DATETIME,
     load_src VARCHAR(20)
@@ -16,7 +16,7 @@ GROUP BY calendar_hierarchy_day(load_dt::DATE, 3, 2);
 INSERT INTO STV2023091120__DWH.s_auth_history (
     hk_l_user_group_activity,
     user_id_from,
-    "event",
+    group_event,
     event_dt,
     load_dt,
     load_src
@@ -24,8 +24,8 @@ INSERT INTO STV2023091120__DWH.s_auth_history (
 SELECT
     luga.hk_l_user_group_activity,
     gl.user_id_from,
-    gl."event",
-    gl."datetime" AS event_dt,
+    gl.group_event,
+    gl.event_timestamp AS event_dt,
     NOW() AS load_dt,
     's3' AS load_src
 FROM STV2023091120__STAGING.group_log AS gl
